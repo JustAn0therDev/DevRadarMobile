@@ -4,7 +4,8 @@ import MapView, { Marker, Callout } from "react-native-maps";
 import { requestPermissionsAsync, getCurrentPositionAsync } from "expo-location";
 import { MaterialIcons } from '@expo/vector-icons';
 
-import api from '../services/api.js';
+import api from '../services/api';
+import { connect, disconnect, subscribeToNewDevs } from '../services/socket';
 
 const styles = StyleSheet.create({
     map: {
@@ -18,7 +19,7 @@ const styles = StyleSheet.create({
         borderColor: '#fff'
     },
     callout: {
-        width: 320,
+        width: 320
     },
     devName: {
         fontWeight: 'bold',
@@ -33,7 +34,7 @@ const styles = StyleSheet.create({
     },
     searchForm: {
         position: 'absolute',
-        bottom: 20,
+        top: 20,
         left: 20,
         right: 20,
         zIndex: 5,
@@ -104,9 +105,19 @@ export default function Main({ navigation }) {
         LoadInitialPosition();
     }, []);
 
-    async function loadDevs() {
+    useEffect(() => {
+        subscribeToNewDevs(dev => setDevs([...devs, dev]))
+    }, [devs]);
 
-        console.log(techs);
+    function setupWebSocket() {
+        disconnect();
+
+        const {latitude, longitude} = currentRegion;
+
+        connect(latitude, longitude, techs);
+    }
+
+    async function loadDevs() {
 
         const response = await api.get('/search', {
                 params: {
@@ -115,8 +126,12 @@ export default function Main({ navigation }) {
                     techs
                 }
             });
-        
-        setDevs(response.data.devs);
+
+        let devArray = await response.data.devs;
+
+        setDevs(devArray);
+
+        setupWebSocket();
     }
 
     function handleRegionChange(region) {
@@ -135,14 +150,14 @@ export default function Main({ navigation }) {
         style={styles.map}
         >
         {devs.map(dev => (
-        <Marker key={dev._id} coordinate={{latitude: dev.location.coordinates[0], longitude: dev.location.coordinates[1]}} >
-            <Image style={styles.avatar} source={{ uri: "https://avatars0.githubusercontent.com/u/48066526?s=460&v=4" }} />
+        <Marker key={dev._id} coordinate={{longitude: dev.location.coordinates[0], latitude: dev.location.coordinates[1]}} >
+            <Image style={styles.avatar} source={{ uri: dev.avatar_url }} />
             <Callout onPress={() => {
-                navigation.navigate('Profile', { github_username: 'JustAn0therDev' })
+                navigation.navigate('Profile', { github_username: dev.github_username })
             }}>
                 <View style={styles.callout}>
                     <Text style={styles.devName}>{dev.name}</Text>
-                    <Text style={styles.devBio}>{dev.bio}</Text>
+                    <Text style={styles.devBio}>{dev.biography}</Text>
                     <Text style={styles.devTechs}>{dev.techs.join(', ')}</Text>
                 </View>
             </Callout>
